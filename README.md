@@ -16,7 +16,8 @@ The first one, build the image.
 The second one, run the container using de previous image in detach mode and doing a porting to 81 port in the host.
 The last one is to watch the logs.
 
-\*\* Optional
+**Optional**
+
 You could override the internal port:
 
 ```
