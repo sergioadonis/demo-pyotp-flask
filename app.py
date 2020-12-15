@@ -1,52 +1,56 @@
-import os
+from os import environ
 from flask import Flask, request
 from flask.json import jsonify
 from pyotp import TOTP, random_base32
 
 
 app = Flask(__name__)
-def log(message): return app.logger.info(message)
+
+interval = int(environ.get('TOTP_INTERVAL', default=60))  # in seconds
 
 
-TOTP_INTERVAL = 60
+@app.route('/generate-otp')
+def generate_otp():
+    try:
+        phone = request.args.get('phone', None)
+        app.logger.info(f'Phone: {phone}')
+        shared_key = random_base32()
+        app.logger.info(f'Shared key: {shared_key}')
+        totp = TOTP(shared_key, interval=interval)
+        code = totp.now()
+        app.logger.info(f'Otp code: {code}')
+
+        return jsonify({
+            'ok': True,
+            'message': f'Code sent to {phone}',
+            'shared_key': shared_key
+        })
+
+    except Exception as error:
+        app.logger.error(f'Exception {error}')
+        return ('Error', 500)
 
 
-@app.route('/otp', methods=['POST'])
-def create_totp():
-    phone = request.json.get('phone', None)
-    log(f'Phone: {phone}')
-    email = request.json.get('email', None)
-    log(f'Email: {email}')
+@app.route('/verify-otp/<shared_key>/<code>')
+def verify_otp(shared_key, code):
+    try:
+        app.logger.info(f'Shared key: {shared_key}, Code: {code}')
+        totp = TOTP(shared_key, interval=interval)
+        result = totp.verify(code)
+        app.logger.info(f'Is otp code {code} valid? {result}')
 
-    secret = random_base32()
-    totp = TOTP(secret, interval=TOTP_INTERVAL)
-    code = totp.now()
-    log(f'Sending otp code {code}')
+        if (result):
+            return ('Valid', 200)
 
-    response = {
-        'ok': True,
-        'message': 'Code sent',
-        'secret': secret
-    }
+        return ('Code not valid', 400)
 
-    return jsonify(response)
+    except Exception as error:
+        app.logger.error(f'Exception {error}')
+        return ('Error', 500)
 
 
-@app.route('/otp/<secret>/<code>', methods=['GET'])
-def verify_totp_code(secret, code):
-    log(f'Secret: {secret}')
-    log(f'Code: {code}')
+port = environ.get('PORT', default=5000)
 
-    totp = TOTP(secret, interval=TOTP_INTERVAL)
-    result = totp.verify(code)
-    log(f'Is otp code {code} valid {result}')
-    if (result):
-        return ('Valid', 200)
-
-    return ('Code not valid', 400)
-
-
-port = os.environ.get('PORT', default=5000)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port, debug=True)
